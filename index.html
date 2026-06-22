@@ -25,11 +25,23 @@
     
     
     <div id="config" class="config">
-      <!-- 
+      <label class="control">
+        <span>Lens radius: <output id="lens-radius-value" for="lens-radius">40</output></span>
+        <input id="lens-radius" type="range" min="20" max="180" step="5" value="40" />
+      </label>
 
-        your controls can go here  
+      <label class="control control-inline">
+        <input id="semantic-zoom" type="checkbox" checked />
+        <span>Semantic zoom</span>
+      </label>
 
-      -->
+      <label class="control">
+        <span>Lens function</span>
+        <select id="lens-function">
+          <option value="edges">Highlight connected edges</option>
+          <option value="radar">Show radar charts</option>
+        </select>
+      </label>
     </div>
     
   </body>

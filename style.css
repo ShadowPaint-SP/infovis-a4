@@ -22,3 +22,42 @@
   z-index: 1;
 }
 
+.control {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35em;
+  margin-bottom: 1em;
+  font-family: sans-serif;
+  font-size: 0.9em;
+}
+
+.control-inline {
+  flex-direction: row;
+  align-items: center;
+}
+
+.control input[type="range"],
+.control select {
+  width: 100%;
+}
+
+#radar-layer {
+  position: absolute;
+  left: 0;
+  top: 0;
+  right: 12em;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.radar-node {
+  position: absolute;
+  width: 56px;
+  height: 56px;
+  transform: translate(-50%, -50%);
+}
+
+.radar-node svg {
+  display: block;
+}

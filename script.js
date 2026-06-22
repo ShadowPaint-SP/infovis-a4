@@ -1,7 +1,7 @@
 // This is your playground!
 // Add functionality to your html controls, play with cytoscape's events and make those magic lenses!
 
-/* global fetch, cytoscape */
+/* global fetch, cytoscape, RadarChart2 */
 import _style from "./style.js";
 import { default as d3Fisheye } from "./libs/d3-fisheye-2.1.2.js";
 import { default as _ } from "./libs/underscore-1.13.6.js";
@@ -14,6 +14,7 @@ async function getData() {
     football.nodes.forEach((n) => {
         data.push({
             data: {
+                ...n,
                 id: n.id,
                 name: n.label,
                 mins: n.mins_played || 0,
@@ -73,9 +74,84 @@ async function main() {
 
     cy.style(_style);
 
+    const radarIgnore = new Set(["id", "label", "name"]);
+    const radarKey = key => !radarIgnore.has(key);
+
+    const highAttributeNodes = cy.nodes().filter(n => Object.keys(n.data()).filter(radarKey).length >= 10);
+    const lowAttributeNodes = cy.nodes().filter(n => Object.keys(n.data()).filter(radarKey).length < 10);
+    const lowAttributeElements = lowAttributeNodes.union(lowAttributeNodes.connectedEdges());
+    let lowAttributeElementsHidden = false;
+
+    const radarLayer = document.createElement("div");
+    radarLayer.id = "radar-layer";
+    document.body.appendChild(radarLayer);
+
+    const lens = document.getElementById("lens");
+    const radiusInput = document.getElementById("lens-radius");
+    const radiusValue = document.getElementById("lens-radius-value");
+    const semanticZoomInput = document.getElementById("semantic-zoom");
+    const lensFunctionSelect = document.getElementById("lens-function");
+
+    const lensState = {
+        radius: Number(radiusInput.value),
+        semanticZoom: semanticZoomInput.checked,
+        function: lensFunctionSelect.value,
+        mouse: null,
+    };
+
+    lens.setAttribute("r", lensState.radius);
+
+    function setAttributeShapeStyle(enabled) {
+        cy.batch(() => {
+            highAttributeNodes.style("shape", enabled ? "ellipse" : "");
+            lowAttributeNodes.style("shape", enabled ? "rectangle" : "");
+        });
+    }
+
+    function canShowSemanticDetails() {
+        return !lensState.semanticZoom || cy.zoom() >= 2;
+    }
+
+    function clearLensEffects() {
+        cy.edges(".magic").removeClass("magic");
+        cy.nodes(".magic").removeClass("magic");
+        radarLayer.replaceChildren();
+    }
+
+    function updateSemanticZoom() {
+        const zoom_level = cy.zoom();
+
+        if (!lensState.semanticZoom) {
+            if (lowAttributeElementsHidden) {
+                cy.batch(() => lowAttributeElements.show());
+                lowAttributeElementsHidden = false;
+            }
+            setAttributeShapeStyle(false);
+            return;
+        }
+
+        if (zoom_level >= 1) {
+            if (lowAttributeElementsHidden) {
+                cy.batch(() => lowAttributeElements.show());
+                lowAttributeElementsHidden = false;
+            }
+        } else if (!lowAttributeElementsHidden) {
+            cy.batch(() => lowAttributeElements.hide());
+            lowAttributeElementsHidden = true;
+        }
+
+        setAttributeShapeStyle(zoom_level >= 1);
+
+        if (zoom_level < 2 && lensState.function === "radar") {
+            clearLensEffects();
+        }
+    }
+
     cy.on("zoom", e => {
         const zoom_level = cy.zoom();
         console.log(`Zoom level: ${zoom_level}`);
+
+        updateSemanticZoom();
 
         /* 
           Your code goes here! 
@@ -89,20 +165,71 @@ async function main() {
 
     });
 
-    const lens = document.getElementById("lens");
+    function addRadarChart(n, node) {
+        const size = n.renderedWidth();
+        const chart = document.createElement("div");
+        chart.id = `radar-${n.id()}`;
+        chart.className = "radar-node";
+        chart.style.left = `${node.x}px`;
+        chart.style.top = `${node.y}px`;
+        chart.style.width = `${size}px`;
+        chart.style.height = `${size}px`;
+        radarLayer.appendChild(chart);
+
+        RadarChart2(`#${chart.id}`, [n.data()], {
+            w: size,
+            h: size,
+            _filter: radarKey,
+            labels: false,
+        });
+    }
+
+    radiusInput.addEventListener("input", () => {
+        lensState.radius = Number(radiusInput.value);
+        lens.setAttribute("r", lensState.radius);
+        radiusValue.value = lensState.radius;
+    });
+
+    semanticZoomInput.addEventListener("change", () => {
+        lensState.semanticZoom = semanticZoomInput.checked;
+        updateSemanticZoom();
+    });
+
+    lensFunctionSelect.addEventListener("change", () => {
+        lensState.function = lensFunctionSelect.value;
+
+        clearLensEffects();
+
+    });
+
+    updateSemanticZoom();
 
     cy.on("mousemove", _.throttle(e => {
         const mouse = { x: e.originalEvent.x, y: e.originalEvent.y };
-        console.log(`Mouse position: [x: ${mouse.x}, y: ${mouse.y}]`);
+        //console.log(`Mouse position: [x: ${mouse.x}, y: ${mouse.y}]`);
 
+        lensState.mouse = mouse;
         lens.setAttribute("cx", mouse.x);
         lens.setAttribute("cy", mouse.y);
 
+        // Edge highlight: visually highlight edges connected to nodes inside the lens.
+        cy.startBatch();
+        clearLensEffects();
         cy.nodes().forEach((n) => {
             const node = n.renderedPosition(); // Careful: other position functions may invoke different coordinate systems
-
-            // console.log(`Node position: [x: ${node.x}, y: ${node.y}]`);
+            if (isInCircle(mouse, lensState.radius, node) == true) {
+                //console.log(n.data().name);
+                if (lensState.function === "edges") {
+                    n.outgoers("edge").addClass("magic");
+                    n.incomers("edge").addClass("magic");
+                } else if (canShowSemanticDetails()) {
+                    n.addClass("magic");
+                    addRadarChart(n, node);
+                }
+            }
+            //console.log(`${node.name} position: [x: ${node.x}, y: ${node.y}]`);
         });
+        cy.endBatch();
 
         /* 
           Your code also goes here! 
@@ -112,7 +239,7 @@ async function main() {
             2. if you experience performance issues, use cy.startBatch() and cy.endBatch() to avoid unnecessary canvas redraws. See https://js.cytoscape.org/#cy.batch for more
             3. see below how to get the mouse and node positions
         */
-    }, 100));
+    }, 10));
 
 }
 
