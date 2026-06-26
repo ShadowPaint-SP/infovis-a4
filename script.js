@@ -118,7 +118,11 @@ async function main() {
         radarLayer.replaceChildren();
     }
 
-    function updateSemanticZoom() {
+
+    cy.on("zoom", e => {
+        const zoom_level = cy.zoom();
+        //console.log(`Zoom level: ${zoom_level}`);
+
         const zoom_level = cy.zoom();
 
         if (!lensState.semanticZoom) {
@@ -145,13 +149,6 @@ async function main() {
         if (zoom_level < 2 && lensState.function === "radar") {
             clearLensEffects();
         }
-    }
-
-    cy.on("zoom", e => {
-        const zoom_level = cy.zoom();
-        console.log(`Zoom level: ${zoom_level}`);
-
-        updateSemanticZoom();
 
         /* 
           Your code goes here! 
@@ -165,25 +162,6 @@ async function main() {
 
     });
 
-    function addRadarChart(n, node) {
-        const size = n.renderedWidth();
-        const chart = document.createElement("div");
-        chart.id = `radar-${n.id()}`;
-        chart.className = "radar-node";
-        chart.style.left = `${node.x}px`;
-        chart.style.top = `${node.y}px`;
-        chart.style.width = `${size}px`;
-        chart.style.height = `${size}px`;
-        radarLayer.appendChild(chart);
-
-        RadarChart2(`#${chart.id}`, [n.data()], {
-            w: size,
-            h: size,
-            _filter: radarKey,
-            labels: false,
-        });
-    }
-
     radiusInput.addEventListener("input", () => {
         lensState.radius = Number(radiusInput.value);
         lens.setAttribute("r", lensState.radius);
@@ -192,7 +170,6 @@ async function main() {
 
     semanticZoomInput.addEventListener("change", () => {
         lensState.semanticZoom = semanticZoomInput.checked;
-        updateSemanticZoom();
     });
 
     lensFunctionSelect.addEventListener("change", () => {
@@ -201,8 +178,6 @@ async function main() {
         clearLensEffects();
 
     });
-
-    updateSemanticZoom();
 
     cy.on("mousemove", _.throttle(e => {
         const mouse = { x: e.originalEvent.x, y: e.originalEvent.y };
@@ -218,13 +193,28 @@ async function main() {
         cy.nodes().forEach((n) => {
             const node = n.renderedPosition(); // Careful: other position functions may invoke different coordinate systems
             if (isInCircle(mouse, lensState.radius, node) == true) {
-                //console.log(n.data().name);
+                console.log(n.data());
                 if (lensState.function === "edges") {
                     n.outgoers("edge").addClass("magic");
                     n.incomers("edge").addClass("magic");
                 } else if (canShowSemanticDetails()) {
                     n.addClass("magic");
-                    addRadarChart(n, node);
+                    const size = n.renderedWidth();
+                    const chart = document.createElement("div");
+                    chart.id = `radar-${n.id()}`;
+                    chart.className = "radar-node";
+                    chart.style.left = `${node.x}px`;
+                    chart.style.top = `${node.y}px`;
+                    chart.style.width = `${size}px`;
+                    chart.style.height = `${size}px`;
+                    radarLayer.appendChild(chart);
+
+                    RadarChart2(`#${chart.id}`, [n.data()], {
+                        w: size,
+                        h: size,
+                        _filter: radarKey,
+                        labels: false,
+                    });
                 }
             }
             //console.log(`${node.name} position: [x: ${node.x}, y: ${node.y}]`);
